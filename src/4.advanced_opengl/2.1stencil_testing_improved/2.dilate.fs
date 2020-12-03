@@ -4,8 +4,8 @@ in vec2 TexCoords;
 
 uniform sampler2D screenTexture;
 uniform float radius;
-uniform float gridX; // 2/screenWidth
-uniform float gridY; // 2/screenHeight
+uniform float gridX; // 1/screenWidth
+uniform float gridY; // 1/screenHeight
 
 void main() {
   for (float i = -radius; i < radius; ++i) {

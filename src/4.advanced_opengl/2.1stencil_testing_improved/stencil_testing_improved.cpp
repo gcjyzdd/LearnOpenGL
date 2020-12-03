@@ -295,6 +295,8 @@ int main() {
     glBindFramebuffer(GL_FRAMEBUFFER, targetA.fbo);
 
     shaderSingleColor.use();
+    shaderSingleColor.setMat4("view", view);
+    shaderSingleColor.setMat4("projection", projection);
     glBindVertexArray(cubeVAO);
     model = glm::translate(model, glm::vec3(-1.0f, 0.0f, -1.0f));
     shaderSingleColor.setMat4("model", model);
@@ -310,8 +312,8 @@ int main() {
     glBindFramebuffer(GL_FRAMEBUFFER, targetB.fbo);
     shaderDilation.use();
     shaderDilation.setFloat("radius", 4.F);
-    shaderDilation.setFloat("gridX", 2.F / SCR_WIDTH);
-    shaderDilation.setFloat("gridY", 2.F / SCR_HEIGHT);
+    shaderDilation.setFloat("gridX", 1.F / SCR_WIDTH);
+    shaderDilation.setFloat("gridY", 1.F / SCR_HEIGHT);
     shaderDilation.setInt("screenTexture", 0);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, targetA.colorTexId);
@@ -347,6 +349,8 @@ int main() {
     // the objects' size differences, making it look like borders.
     // -----------------------------------------------------------------------------------------------------------------------------
     shader.use();
+    shader.setMat4("view", view);
+    shader.setMat4("projection", projection);
     glBindVertexArray(cubeVAO);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, cubeTexture);
