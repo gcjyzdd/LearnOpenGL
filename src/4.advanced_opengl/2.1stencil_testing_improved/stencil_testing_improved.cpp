@@ -1,5 +1,6 @@
-#include <GLFW/glfw3.h>
 #include <glad/glad.h>
+
+#include <GLFW/glfw3.h>
 #include <stb_image.h>
 
 #include <glm/glm.hpp>
@@ -32,6 +33,53 @@ bool firstMouse = true;
 // timing
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
+
+/**
+ * @brief A very simple render target struct that has one clolour texture
+ * buffer, and depth and stencil buffer.
+ *
+ */
+struct SimpleRenderTarget {
+  unsigned int fbo{0};               /// framebuffer id
+  unsigned int colorTexId{0};        /// colour buffer id
+  unsigned int depthStencilTexId{0}; /// depth and stencil buffer id
+};
+
+/**
+ * @brief Create a Render Target object with depth and stencil buffer
+ *
+ * @return SimpleRenderTarget
+ */
+SimpleRenderTarget createRenderTarget() {
+  unsigned int fbo;
+  glGenFramebuffers(1, &fbo);
+  glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+  unsigned int texId;
+  glGenTextures(1, &texId);
+  glBindTexture(GL_TEXTURE_2D, texId);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA,
+               GL_FLOAT, NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                         texId, 0);
+
+  SimpleRenderTarget rt;
+  rt.fbo = fbo;
+  rt.colorTexId = texId;
+
+  glGenTextures(1, &texId);
+  glBindTexture(GL_TEXTURE_2D, texId);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_STENCIL, SCR_WIDTH, SCR_HEIGHT, 0,
+               GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
+                         GL_TEXTURE_2D, texId, 0);
+
+  rt.depthStencilTexId = texId;
+}
 
 int main() {
   // glfw: initialize and configure
@@ -118,6 +166,17 @@ int main() {
 
       5.0f, -0.5f, 5.0f,  2.0f,  0.0f,  -5.0f, -0.5f, -5.0f,
       0.0f, 2.0f,  5.0f,  -0.5f, -5.0f, 2.0f,  2.0f};
+
+  //
+  // here offset the cube such that the anchor is not at the geometry center
+  //
+  float offset = 0.5F;
+  for (int i = 0; i < 36; ++i) {
+    cubeVertices[5 * i] += offset;
+    cubeVertices[5 * i + 1] += offset;
+    cubeVertices[5 * i + 2] += offset;
+  }
+
   // cube VAO
   unsigned int cubeVAO, cubeVBO;
   glGenVertexArrays(1, &cubeVAO);
