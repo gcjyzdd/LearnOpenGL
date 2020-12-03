@@ -323,6 +323,8 @@ int main() {
     // copy stencil buffer from target B
     glBlitFramebuffer(0, 0, SCR_WIDTH, SCR_HEIGHT, 0, 0, SCR_WIDTH, SCR_HEIGHT,
                       GL_STENCIL_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
     // blit target B to the default frame buffer
     glStencilFunc(GL_NOTEQUAL, 0, 0xFF);
     glStencilMask(0x00);
