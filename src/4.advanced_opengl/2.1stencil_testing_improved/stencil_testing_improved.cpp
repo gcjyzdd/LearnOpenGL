@@ -135,6 +135,7 @@ int main() {
   Shader shader("2.stencil_testing.vs", "2.stencil_testing.fs");
   Shader shaderSingleColor("2.stencil_testing.vs", "2.stencil_single_color.fs");
   Shader shaderDilation("2.quad.vs", "2.dilate.fs");
+  Shader shaderBlit("2.quad.vs", "2.blit.fs");
 
   // set up vertex data (and buffer(s)) and configure vertex attributes
   // ------------------------------------------------------------------
@@ -212,6 +213,24 @@ int main() {
                         (void *)(3 * sizeof(float)));
   glBindVertexArray(0);
 
+  // screen quad
+  unsigned int screenQuadVAO;
+  unsigned int screenQuadVBO;
+  float cs[] = {-1.0F, 1.0F,  0.0F, 1.0F, -1.0F, -1.0F, 0.0F, 0.0F,
+                1.0F,  -1.0F, 1.0F, 0.0F, -1.0F, 1.0F,  0.0F, 1.0F,
+                1.0F,  -1.0F, 1.0F, 0.0F, 1.0F,  1.0F,  1.0F, 1.0F};
+  glGenVertexArrays(1, &screenQuadVAO);
+  glGenBuffers(1, &screenQuadVBO);
+  glBindVertexArray(screenQuadVAO);
+  glBindBuffer(GL_ARRAY_BUFFER, screenQuadVBO);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(cs), &cs, GL_STATIC_DRAW);
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), nullptr);
+  glEnableVertexAttribArray(1);
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
+                        (void *)(2 * sizeof(float)));
+  glBindVertexArray(0);
+
   // load textures
   // -------------
   unsigned int cubeTexture =
@@ -270,9 +289,62 @@ int main() {
 
     // 1st. render pass, draw objects as normal, writing to the stencil buffer
     // --------------------------------------------------------------------
+
+    // render to target A
+    // enable stencil buffer
+    glBindFramebuffer(GL_FRAMEBUFFER, targetA.fbo);
+
+    shaderSingleColor.use();
+    glBindVertexArray(cubeVAO);
+    model = glm::translate(model, glm::vec3(-1.0f, 0.0f, -1.0f));
+    shaderSingleColor.setMat4("model", model);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    model = glm::mat4(1.0f);
+    model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
+    shaderSingleColor.setMat4("model", model);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    // dilate contour and render to target B
     glStencilFunc(GL_ALWAYS, 1, 0xFF);
     glStencilMask(0xFF);
-    // cubes
+    glBindFramebuffer(GL_FRAMEBUFFER, targetB.fbo);
+    shaderDilation.use();
+    shaderDilation.setFloat("radius", 4.F);
+    shaderDilation.setFloat("gridX", 2.F / SCR_WIDTH);
+    shaderDilation.setFloat("gridY", 2.F / SCR_HEIGHT);
+    shaderDilation.setInt("screenTexture", 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, targetA.colorTexId);
+    glBindVertexArray(screenQuadVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+
+    // bind to defaul frame buffer
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    // copy stencil buffer from target B
+    glBlitFramebuffer(0, 0, SCR_WIDTH, SCR_HEIGHT, 0, 0, SCR_WIDTH, SCR_HEIGHT,
+                      GL_STENCIL_BUFFER_BIT, GL_NEAREST);
+    // blit target B to the default frame buffer
+    glStencilFunc(GL_NOTEQUAL, 0, 0xFF);
+    glStencilMask(0x00);
+    glDisable(GL_DEPTH_TEST);
+    shaderBlit.use();
+    shaderBlit.setInt("screenTexture", 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, targetB.colorTexId);
+    glBindVertexArray(screenQuadVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+
+    glStencilMask(0xFF);
+    glStencilFunc(GL_ALWAYS, 0, 0xFF);
+    glEnable(GL_DEPTH_TEST);
+
+    // 2nd. render pass: now draw slightly scaled versions of the objects, this
+    // time disabling stencil writing.
+    // Because the stencil buffer is now filled with several 1s. The parts of
+    // the buffer that are 1 are not drawn, thus only drawing
+    // the objects' size differences, making it look like borders.
+    // -----------------------------------------------------------------------------------------------------------------------------
+    shader.use();
     glBindVertexArray(cubeVAO);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, cubeTexture);
@@ -283,35 +355,6 @@ int main() {
     model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
     shader.setMat4("model", model);
     glDrawArrays(GL_TRIANGLES, 0, 36);
-
-    // 2nd. render pass: now draw slightly scaled versions of the objects, this
-    // time disabling stencil writing.
-    // Because the stencil buffer is now filled with several 1s. The parts of
-    // the buffer that are 1 are not drawn, thus only drawing
-    // the objects' size differences, making it look like borders.
-    // -----------------------------------------------------------------------------------------------------------------------------
-    glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
-    glStencilMask(0x00);
-    glDisable(GL_DEPTH_TEST);
-    shaderSingleColor.use();
-    float scale = 1.1;
-    // cubes
-    glBindVertexArray(cubeVAO);
-    glBindTexture(GL_TEXTURE_2D, cubeTexture);
-    model = glm::mat4(1.0f);
-    model = glm::translate(model, glm::vec3(-1.0f, 0.0f, -1.0f));
-    model = glm::scale(model, glm::vec3(scale, scale, scale));
-    shaderSingleColor.setMat4("model", model);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
-    model = glm::mat4(1.0f);
-    model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
-    model = glm::scale(model, glm::vec3(scale, scale, scale));
-    shaderSingleColor.setMat4("model", model);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
-    glBindVertexArray(0);
-    glStencilMask(0xFF);
-    glStencilFunc(GL_ALWAYS, 0, 0xFF);
-    glEnable(GL_DEPTH_TEST);
 
     // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved
     // etc.)
