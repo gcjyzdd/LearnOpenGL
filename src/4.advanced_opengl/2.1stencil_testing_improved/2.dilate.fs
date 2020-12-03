@@ -20,4 +20,6 @@ void main() {
       }
     }
   }
+  // not near the selected object, discard
+  discard;
 }
