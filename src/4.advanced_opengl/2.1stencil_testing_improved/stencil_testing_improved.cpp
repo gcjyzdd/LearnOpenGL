@@ -117,6 +117,11 @@ int main() {
     return -1;
   }
 
+  auto targetA = createRenderTarget();
+  auto targetB = createRenderTarget();
+
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
   // configure global opengl state
   // -----------------------------
   glEnable(GL_DEPTH_TEST);
@@ -129,6 +134,7 @@ int main() {
   // -------------------------
   Shader shader("2.stencil_testing.vs", "2.stencil_testing.fs");
   Shader shaderSingleColor("2.stencil_testing.vs", "2.stencil_single_color.fs");
+  Shader shaderDilation("2.quad.vs", "2.dilate.fs");
 
   // set up vertex data (and buffer(s)) and configure vertex attributes
   // ------------------------------------------------------------------
