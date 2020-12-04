@@ -308,6 +308,7 @@ int main() {
     // render to target A
     glBindFramebuffer(GL_FRAMEBUFFER, targetA.fbo);
     glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+    glClearColor(0.f, 0.f, 0.f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
     shaderSingleColor.use();
