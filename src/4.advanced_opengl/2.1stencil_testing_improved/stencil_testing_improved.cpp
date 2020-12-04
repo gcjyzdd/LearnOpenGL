@@ -40,9 +40,9 @@ float lastFrame = 0.0f;
  *
  */
 struct SimpleRenderTarget {
-  unsigned int fbo{0};               /// framebuffer id
-  unsigned int colorTexId{0};        /// colour buffer id
-  unsigned int depthStencilTexId{0}; /// depth and stencil buffer id
+  unsigned int fbo{0};                /// framebuffer id
+  unsigned int colorTexId{0};         /// colour buffer id
+  unsigned int depthStencilTexId{0};  /// depth and stencil buffer id
 };
 
 /**
@@ -55,30 +55,37 @@ SimpleRenderTarget createRenderTarget() {
   glGenFramebuffers(1, &fbo);
   glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
-  unsigned int texId;
-  glGenTextures(1, &texId);
-  glBindTexture(GL_TEXTURE_2D, texId);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA,
-               GL_FLOAT, NULL);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                         texId, 0);
-
   SimpleRenderTarget rt;
   rt.fbo = fbo;
-  rt.colorTexId = texId;
 
-  glGenTextures(1, &texId);
-  glBindTexture(GL_TEXTURE_2D, texId);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_STENCIL, SCR_WIDTH, SCR_HEIGHT, 0,
-               GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
-                         GL_TEXTURE_2D, texId, 0);
+  {
+    unsigned int texId;
+    glGenTextures(1, &texId);
+    glBindTexture(GL_TEXTURE_2D, texId);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA,
+                 GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                           texId, 0);
+    rt.colorTexId = texId;
+  }
 
-  rt.depthStencilTexId = texId;
+  {
+    unsigned int texId;
+    glGenTextures(1, &texId);
+    glBindTexture(GL_TEXTURE_2D, texId);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_STENCIL, SCR_WIDTH, SCR_HEIGHT, 0,
+                 GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
+                           GL_TEXTURE_2D, texId, 0);
+
+    rt.depthStencilTexId = texId;
+  }
+
+  return rt;
 }
 
 int main() {
@@ -258,9 +265,11 @@ int main() {
 
     // render
     // ------
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT |
-            GL_STENCIL_BUFFER_BIT); // don't forget to clear the stencil buffer!
+    glClear(
+        GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT |
+        GL_STENCIL_BUFFER_BIT);  // don't forget to clear the stencil buffer!
 
     // set uniforms
     shaderSingleColor.use();
@@ -293,6 +302,7 @@ int main() {
     // render to target A
     // enable stencil buffer
     glBindFramebuffer(GL_FRAMEBUFFER, targetA.fbo);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
     shaderSingleColor.use();
     shaderSingleColor.setMat4("view", view);
@@ -307,28 +317,32 @@ int main() {
     glDrawArrays(GL_TRIANGLES, 0, 36);
 
     // dilate contour and render to target B
-    glStencilFunc(GL_ALWAYS, 1, 0xFF);
-    glStencilMask(0xFF);
     glBindFramebuffer(GL_FRAMEBUFFER, targetB.fbo);
+    glStencilMask(0xFF);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    glStencilFunc(GL_ALWAYS, 1, 0xFF);
     shaderDilation.use();
-    shaderDilation.setFloat("radius", 4.F);
-    shaderDilation.setFloat("gridX", 1.F / SCR_WIDTH);
-    shaderDilation.setFloat("gridY", 1.F / SCR_HEIGHT);
+    shaderDilation.setFloat("radius", 5.F);
+    shaderDilation.setFloat("gridX", 2.F / (float)SCR_WIDTH);
+    shaderDilation.setFloat("gridY", 2.F / (float)SCR_HEIGHT);
     shaderDilation.setInt("screenTexture", 0);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, targetA.colorTexId);
     glBindVertexArray(screenQuadVAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
-    // bind to defaul frame buffer
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glStencilFunc(GL_ALWAYS, 0, 0xFF);
+
     // copy stencil buffer from target B
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, targetB.fbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     glBlitFramebuffer(0, 0, SCR_WIDTH, SCR_HEIGHT, 0, 0, SCR_WIDTH, SCR_HEIGHT,
                       GL_STENCIL_BUFFER_BIT, GL_NEAREST);
+    // bind to defaul frame buffer
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // blit target B to the default frame buffer
-    glStencilFunc(GL_NOTEQUAL, 0, 0xFF);
+    glStencilFunc(GL_EQUAL, 1, 0xFF);
     glStencilMask(0x00);
     glDisable(GL_DEPTH_TEST);
     shaderBlit.use();
@@ -351,6 +365,7 @@ int main() {
     shader.use();
     shader.setMat4("view", view);
     shader.setMat4("projection", projection);
+    shader.setInt("texture1", 0);
     glBindVertexArray(cubeVAO);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, cubeTexture);
@@ -360,6 +375,7 @@ int main() {
     model = glm::mat4(1.0f);
     model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
     shader.setMat4("model", model);
+    glBindVertexArray(cubeVAO);
     glDrawArrays(GL_TRIANGLES, 0, 36);
 
     // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved
@@ -418,7 +434,7 @@ void mouse_callback(GLFWwindow *window, double xpos, double ypos) {
 
   float xoffset = xpos - lastX;
   float yoffset =
-      lastY - ypos; // reversed since y-coordinates go from bottom to top
+      lastY - ypos;  // reversed since y-coordinates go from bottom to top
 
   lastX = xpos;
   lastY = ypos;
