@@ -40,9 +40,9 @@ float lastFrame = 0.0f;
  *
  */
 struct SimpleRenderTarget {
-  unsigned int fbo{0};                /// framebuffer id
-  unsigned int colorTexId{0};         /// colour buffer id
-  unsigned int depthStencilTexId{0};  /// depth and stencil buffer id
+  unsigned int fbo{0};               /// framebuffer id
+  unsigned int colorTexId{0};        /// colour buffer id
+  unsigned int depthStencilTexId{0}; /// depth and stencil buffer id
 };
 
 /**
@@ -136,7 +136,10 @@ int main() {
 
   auto targetA = createRenderTarget();
   auto targetB = createRenderTarget();
-  auto targetMain = createRenderTarget();
+
+  if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    std::cout << "Framebuffer not complete!" << std::endl;
+
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   // build and compile shaders
@@ -268,7 +271,7 @@ int main() {
     // render
     // ------
     glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
-    glBindFramebuffer(GL_FRAMEBUFFER, targetMain.fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glStencilMask(0xFF);
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
@@ -291,6 +294,7 @@ int main() {
     // only care about the containers. We set its mask to 0x00 to not write to
     // the stencil buffer.
     glStencilMask(0x00);
+    glStencilFunc(GL_ALWAYS, 0, 0xFF);
     // floor
     glBindVertexArray(planeVAO);
     glBindTexture(GL_TEXTURE_2D, floorTexture);
@@ -298,11 +302,10 @@ int main() {
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
 
-    // 1st. render pass, draw objects as normal, writing to the stencil buffer
+    // 1st. render pass, draw highlighted objects
     // --------------------------------------------------------------------
 
     // render to target A
-    // enable stencil buffer
     glBindFramebuffer(GL_FRAMEBUFFER, targetA.fbo);
     glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
@@ -311,12 +314,12 @@ int main() {
     shaderSingleColor.setMat4("view", view);
     shaderSingleColor.setMat4("projection", projection);
     glBindVertexArray(cubeVAO);
-    model = glm::translate(model, glm::vec3(-1.0f, 0.0f, -1.0f));
-    shaderSingleColor.setMat4("model", model);
+    auto model1 = glm::translate(model, glm::vec3(-1.0f, 0.0f, -1.0f));
+    shaderSingleColor.setMat4("model", model1);
     glDrawArrays(GL_TRIANGLES, 0, 36);
-    model = glm::mat4(1.0f);
-    model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
-    shaderSingleColor.setMat4("model", model);
+    auto model2 = glm::mat4(1.0f);
+    model2 = glm::translate(model2, glm::vec3(2.0f, 0.0f, 0.0f));
+    shaderSingleColor.setMat4("model", model2);
     glDrawArrays(GL_TRIANGLES, 0, 36);
 
     // dilate contour and render to target B
@@ -325,6 +328,7 @@ int main() {
     glStencilMask(0xFF);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
     glStencilFunc(GL_ALWAYS, 1, 0xFF);
+    glStencilMask(0xFF);
     shaderDilation.use();
     shaderDilation.setFloat("radius", 5.F);
     shaderDilation.setFloat("gridX", 1.F / (float)SCR_WIDTH);
@@ -339,11 +343,12 @@ int main() {
 
     // copy stencil buffer from target B
     glBindFramebuffer(GL_READ_FRAMEBUFFER, targetB.fbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, targetMain.fbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     glBlitFramebuffer(0, 0, SCR_WIDTH, SCR_HEIGHT, 0, 0, SCR_WIDTH, SCR_HEIGHT,
                       GL_STENCIL_BUFFER_BIT, GL_NEAREST);
+
     // bind to main frame buffer
-    glBindFramebuffer(GL_FRAMEBUFFER, targetMain.fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // blit target B to the default frame buffer
     glStencilFunc(GL_EQUAL, 1, 0xFF);
@@ -356,44 +361,25 @@ int main() {
     glBindVertexArray(screenQuadVAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
+    // disable stencil buffer
     glStencilMask(0xFF);
     glStencilFunc(GL_ALWAYS, 0, 0xFF);
     glEnable(GL_DEPTH_TEST);
 
-    // 2nd. render pass: now draw slightly scaled versions of the objects, this
-    // time disabling stencil writing.
-    // Because the stencil buffer is now filled with several 1s. The parts of
-    // the buffer that are 1 are not drawn, thus only drawing
-    // the objects' size differences, making it look like borders.
+    // 2nd. render pass: draw objects normally
     // -----------------------------------------------------------------------------------------------------------------------------
     shader.use();
     shader.setMat4("view", view);
     shader.setMat4("projection", projection);
     shader.setInt("texture1", 0);
-    glBindVertexArray(cubeVAO);
+
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, cubeTexture);
-    model = glm::translate(model, glm::vec3(-1.0f, 0.0f, -1.0f));
-    shader.setMat4("model", model);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
-    model = glm::mat4(1.0f);
-    model = glm::translate(model, glm::vec3(2.0f, 0.0f, 0.0f));
-    shader.setMat4("model", model);
+    shader.setMat4("model", model1);
     glBindVertexArray(cubeVAO);
     glDrawArrays(GL_TRIANGLES, 0, 36);
-
-    // blit back
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
-    glDisable(GL_DEPTH_TEST);
-    glClearColor(0.F, 0.F, 0.F, 1.F);
-    glClear(GL_COLOR_BUFFER_BIT);
-    shaderBlit.use();
-    shaderBlit.setInt("screenTexture", 0);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, targetMain.colorTexId);
-    glBindVertexArray(screenQuadVAO);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+    shader.setMat4("model", model2);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
 
     // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved
     // etc.)
@@ -451,7 +437,7 @@ void mouse_callback(GLFWwindow *window, double xpos, double ypos) {
 
   float xoffset = xpos - lastX;
   float yoffset =
-      lastY - ypos;  // reversed since y-coordinates go from bottom to top
+      lastY - ypos; // reversed since y-coordinates go from bottom to top
 
   lastX = xpos;
   lastY = ypos;
