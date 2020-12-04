@@ -124,9 +124,6 @@ int main() {
     return -1;
   }
 
-  auto targetA = createRenderTarget();
-  auto targetB = createRenderTarget();
-
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   // configure global opengl state
@@ -136,6 +133,11 @@ int main() {
   glEnable(GL_STENCIL_TEST);
   glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
   glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+
+  auto targetA = createRenderTarget();
+  auto targetB = createRenderTarget();
+  auto targetMain = createRenderTarget();
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   // build and compile shaders
   // -------------------------
@@ -265,11 +267,11 @@ int main() {
 
     // render
     // ------
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+    glBindFramebuffer(GL_FRAMEBUFFER, targetMain.fbo);
+    glStencilMask(0xFF);
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-    glClear(
-        GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT |
-        GL_STENCIL_BUFFER_BIT);  // don't forget to clear the stencil buffer!
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
     // set uniforms
     shaderSingleColor.use();
@@ -302,6 +304,7 @@ int main() {
     // render to target A
     // enable stencil buffer
     glBindFramebuffer(GL_FRAMEBUFFER, targetA.fbo);
+    glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
     shaderSingleColor.use();
@@ -318,13 +321,14 @@ int main() {
 
     // dilate contour and render to target B
     glBindFramebuffer(GL_FRAMEBUFFER, targetB.fbo);
+    glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
     glStencilMask(0xFF);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
     glStencilFunc(GL_ALWAYS, 1, 0xFF);
     shaderDilation.use();
     shaderDilation.setFloat("radius", 5.F);
-    shaderDilation.setFloat("gridX", 2.F / (float)SCR_WIDTH);
-    shaderDilation.setFloat("gridY", 2.F / (float)SCR_HEIGHT);
+    shaderDilation.setFloat("gridX", 1.F / (float)SCR_WIDTH);
+    shaderDilation.setFloat("gridY", 1.F / (float)SCR_HEIGHT);
     shaderDilation.setInt("screenTexture", 0);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, targetA.colorTexId);
@@ -335,11 +339,11 @@ int main() {
 
     // copy stencil buffer from target B
     glBindFramebuffer(GL_READ_FRAMEBUFFER, targetB.fbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, targetMain.fbo);
     glBlitFramebuffer(0, 0, SCR_WIDTH, SCR_HEIGHT, 0, 0, SCR_WIDTH, SCR_HEIGHT,
                       GL_STENCIL_BUFFER_BIT, GL_NEAREST);
-    // bind to defaul frame buffer
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    // bind to main frame buffer
+    glBindFramebuffer(GL_FRAMEBUFFER, targetMain.fbo);
 
     // blit target B to the default frame buffer
     glStencilFunc(GL_EQUAL, 1, 0xFF);
@@ -377,6 +381,19 @@ int main() {
     shader.setMat4("model", model);
     glBindVertexArray(cubeVAO);
     glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    // blit back
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+    glDisable(GL_DEPTH_TEST);
+    glClearColor(0.F, 0.F, 0.F, 1.F);
+    glClear(GL_COLOR_BUFFER_BIT);
+    shaderBlit.use();
+    shaderBlit.setInt("screenTexture", 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, targetMain.colorTexId);
+    glBindVertexArray(screenQuadVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
 
     // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved
     // etc.)
